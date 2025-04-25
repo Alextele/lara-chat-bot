@@ -183,6 +183,7 @@ return [
     */
 
     'aliases' => Facade::defaultAliases()->merge([
+        'ApiLlmVectorService' => App\Facades\ApiLlmVectorServiceFacade::class,
         // 'Example' => App\Facades\Example::class,
     ])->toArray(),
 

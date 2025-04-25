@@ -12,6 +12,7 @@
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="628">
     <meta property="og:site_name" content="Lara Chat Bot">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 {{--    <meta property="og:url" content="{{ $default_meta_settings['url'] }}">--}}
 {{--    <meta property="og:image" content="{{ isset($image) ? $image : $default_meta_settings['image'] }}">--}}
 {{--    <meta property="vk:image" content="{{ isset($image) ? $image : $default_meta_settings['image'] }}">--}}

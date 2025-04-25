@@ -86,6 +86,7 @@
                 });
                 const data = await response.json();
                 messages.innerHTML += `<div class="chat-widget__bot-text"><i class="fas fa-robot chat-widget__icon"></i><div class="chat-widget__bot-answer"> ${data.reply}</div></div>`;
+                console.log(data.reply)
             } catch (error) {
                 messages.innerHTML += `<p class="chat-widget__bot-text"><strong>Бот:</strong> Ошибка связи с сервером</p>`;
             }
