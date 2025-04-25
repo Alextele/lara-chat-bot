@@ -1,0 +1,48 @@
+{
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "gulp dev:scss && gulp build:js && gulp mv:json && gulp mv:fonts && gulp mv:favicons && gulp build:img && vite",
+        "build": "gulp build:scss && gulp build:js && gulp mv:json && gulp mv:fonts && gulp mv:favicons && gulp build:img && vite build",
+        "scss": "gulp build:scss"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.21.0",
+        "@babel/preset-env": "^7.20.2",
+        "axios": "^1.6.4",
+        "browser-sync": "^2.28.1",
+        "gulp": "^4.0.2",
+        "gulp-autoprefixer": "^8.0.0",
+        "gulp-babel": "^8.0.0",
+        "gulp-htmlmin": "^5.0.1",
+        "gulp-notify": "^4.0.0",
+        "gulp-plumber": "^1.2.1",
+        "gulp-rename": "^2.0.0",
+        "gulp-rigger": "^0.5.8",
+        "gulp-sass": "^5.1.0",
+        "gulp-strip-css-comments": "^2.0.0",
+        "gulp-terser": "^2.1.0",
+        "gulp-typograf": "^4.1.0",
+        "laravel-vite-plugin": "^1.0.0",
+        "rimraf": "^4.1.2",
+        "vite": "^5.0.0"
+    },
+    "browserslist": [
+        "last 2 years",
+        " > 1%",
+        "not dead"
+    ],
+    "dependencies": {
+        "@fortawesome/fontawesome-free": "^6.4.0",
+        "@jridgewell/gen-mapping": "^0.3.5",
+        "aos": "^2.3.4",
+        "bootstrap": "^5.3.0",
+        "country-select-js": "^2.1.0",
+        "flag-icons": "^7.1.0",
+        "isotope-layout": "^3.0.6",
+        "jquery": "^3.7.0",
+        "plyr": "^3.7.8",
+        "sass": "^1.70.0",
+        "swiper": "^9.0.1"
+    }
+}
