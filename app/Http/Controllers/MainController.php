@@ -25,13 +25,29 @@ class MainController extends Controller
      */
     final public function chat(Request $request): JsonResponse
     {
+        $history = session('chat_history', []);
+
+
         $question = $request->input('message');
-        $answer = ApiLlmVectorService::getAnswer($question);
+        $answer = ApiLlmVectorService::getAnswer($question, $history);
         if ($answer) {
+
+            $history[] = [
+              'user_question' => $question,
+              'assistant_answer' => $answer
+            ];
+
+            if (count($history) > 5) {
+                $history = array_slice($history, -5);
+            }
+
+            // Сохраняем обновлённую историю в сессию
+            session(['chat_history' => $history]);
+
             return response()->json(['reply' => $answer]);
         } else {
             return response()->json(['reply' => 'Простите, произошла какая-то лажа на сервере :)']);
         }
-
     }
+
 }

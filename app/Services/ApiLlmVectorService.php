@@ -35,18 +35,31 @@ class ApiLlmVectorService
         }
     }
 
-    final public function getAnswer(string $question)
+    final public function getAnswer(string $question, array $history)
     {
         try {
+            if ($history) {
+                $new_question = 'История диалога пользователя и ассистента:\n';
+                foreach ($history as $item) {
+                    $new_question .= 'Пользователь: ' . $item['user_question'] . '\n';
+                    $new_question .= 'Ассистент: ' . $item['assistant_answer'] . '\n';
+                }
+                $new_question .= 'Новый вопрос пользователя: ' . $question;
+                $prompt_add = 'При ответе используй историю диалога.';
+            } else {
+                $new_question = $question;
+                $prompt_add = '';
+            }
+
             // Формируем массив данных для запроса
             $jsonData = [
-                'question' => $question,
+                'question' => $new_question,
                 'temperature' => 1.0, // Увеличиваем для большей креативности
                 'top_k' => 50, // Меньше ограничение на количество вариантов
                 'top_p' => 0.95, // Увеличиваем вероятность более разнообразных ответов
                 'repeat_penalty' => 1.0, // Убираем штраф за повторения для большей гибкости
                 'max_tokens' => 500, // Увеличиваем длину ответа
-                'system_prompt' => "Ты — энергичный и креативный автоматический ассистент. Твои ответы должны быть живыми, яркими и не ограничиваться скучными стандартами. Вдохновляй!"
+                'system_prompt' => "Ты — энергичный и креативный автоматический ассистент." . $prompt_add
             ];
 
             $response = self::$client->post(self::$apiHost . ':' . self::$apiPort . '/generate', [
