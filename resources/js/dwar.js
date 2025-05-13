@@ -2,79 +2,95 @@
     const CLICKER_CODE = `
         (function () {
             let canvas = null;
-            let clickInterval = null;
-
-            function markClick(x, y) {
-                const dot = document.createElement('div');
-                dot.style.position = 'fixed';
-                dot.style.left = \`\${x - 4}px\`;
-                dot.style.top = \`\${y - 4}px\`;
-                dot.style.width = '8px';
-                dot.style.height = '8px';
-                dot.style.backgroundColor = 'red';
-                dot.style.borderRadius = '50%';
-                dot.style.zIndex = 9999;
-                document.body.appendChild(dot);
-                setTimeout(() => dot.remove(), 1000);
-            }
+            let clickTimeout = null;
+            let lastX = 0;
+            let lastY = 0;
 
             function getRandom(min, max) {
                 return min + Math.random() * (max - min);
             }
 
+            function moveMouseSmoothly(targetX, targetY, steps = 8, delay = 5, callback) {
+                const dx = (targetX - lastX) / steps;
+                const dy = (targetY - lastY) / steps;
+                let currentStep = 0;
+
+                function step() {
+                    currentStep++;
+                    const x = lastX + dx * currentStep;
+                    const y = lastY + dy * currentStep;
+
+                    const moveEvent = new PointerEvent('pointermove', {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: x,
+                        clientY: y,
+                        pointerType: 'mouse',
+                        isPrimary: true,
+                    });
+                    document.dispatchEvent(moveEvent);
+
+                    if (currentStep < steps) {
+                        setTimeout(step, delay + getRandom(1, 3));
+                    } else {
+                        lastX = targetX;
+                        lastY = targetY;
+                        callback();
+                    }
+                }
+
+                step();
+            }
+
             function simulateClick(target) {
                 const rect = target.getBoundingClientRect();
-                const x = rect.left + target.width * 0.5 + target.width * getRandom(0.07, 0.11); // +7%...+11%
-                const y = rect.top + target.height * getRandom(0.54, 0.58); // 54%...58%
+                const x = rect.left + target.width * 0.5 + target.width * getRandom(0.07, 0.11);
+                const y = rect.top + target.height * getRandom(0.54, 0.58);
 
-                const options = {
-                    bubbles: true,
-                    cancelable: true,
-                    clientX: x,
-                    clientY: y,
-                    pointerType: 'mouse',
-                    isPrimary: true,
-                };
+                moveMouseSmoothly(x, y, getRandom(6, 12), getRandom(5, 10), () => {
+                    const options = {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: x,
+                        clientY: y,
+                        pointerType: 'mouse',
+                        isPrimary: true,
+                    };
 
-                target.dispatchEvent(new PointerEvent('pointerdown', options));
-                target.dispatchEvent(new PointerEvent('pointerup', options));
-                target.dispatchEvent(new MouseEvent('click', {
-                    bubbles: true,
-                    cancelable: true,
-                    clientX: x,
-                    clientY: y,
-                }));
-
-                console.log(\`🖱 Click at (\${Math.round(x)}, \${Math.round(y)})\`);
-                markClick(x, y);
+                    target.dispatchEvent(new PointerEvent('pointerdown', options));
+                    target.dispatchEvent(new PointerEvent('pointerup', options));
+                    target.dispatchEvent(new MouseEvent('click', {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: x,
+                        clientY: y,
+                    }));
+                });
             }
 
             function startClicking(targetCanvas) {
-                if (clickInterval) return;
+                if (clickTimeout) return;
 
                 canvas = targetCanvas;
-                console.log('🎯 Canvas найден, начинаю кликать');
-
                 canvas.style.touchAction = 'none';
                 canvas.style.cursor = 'pointer';
 
                 function clickLoop() {
                     if (!document.body.contains(canvas)) {
-                        console.log('❌ Canvas исчез, прекращаю кликать');
                         stopClicking();
                         return;
                     }
                     simulateClick(canvas);
-                    const delay = getRandom(900, 1300); // случайная пауза
-                    clickInterval = setTimeout(clickLoop, delay);
+                    const delay = getRandom(900, 1300);
+                    clickTimeout = setTimeout(clickLoop, delay);
                 }
 
                 clickLoop();
             }
 
             function stopClicking() {
-                clearTimeout(clickInterval);
-                clickInterval = null;
+                clearTimeout(clickTimeout);
+                clickTimeout = null;
                 canvas = null;
             }
 
@@ -83,7 +99,6 @@
                 if (fightCanvas) {
                     const targetCanvas = fightCanvas.querySelector('canvas');
                     if (targetCanvas) {
-                        console.log('✅ Canvas найден внутри #fightCanvas');
                         startClicking(targetCanvas);
                         return;
                     }
@@ -91,7 +106,6 @@
                 requestAnimationFrame(waitLoop);
             }
 
-            console.log('🚀 Скрипт запущен внутри iframe. Жду #fightCanvas...');
             waitLoop();
         })();
     `;
@@ -107,9 +121,8 @@
             const script = iframeDoc.createElement('script');
             script.textContent = CLICKER_CODE;
             iframeDoc.documentElement.appendChild(script);
-            console.log('✅ Скрипт автоматически внедрён в iframe#main');
         } catch (err) {
-            console.warn('⚠️ Не удалось внедрить скрипт в iframe:', err);
+            // Молча игнорировать ошибки
         }
     }
 
@@ -117,16 +130,12 @@
         const iframe = document.querySelector('iframe#main');
         if (iframe && iframe.contentWindow && iframe.contentDocument) {
             iframe.addEventListener('load', () => {
-                console.log('🔄 iframe#main загрузился:', iframe.src);
                 setTimeout(() => injectClicker(iframe), 200);
             });
-            console.log('🧭 Найден iframe#main. Жду загрузки...');
         } else {
-            console.log('⏳ Ожидаю появления iframe#main...');
             setTimeout(waitForIframe, 500);
         }
     }
 
-    console.log('🚀 Автоинъектор скрипта в iframe#main запущен');
     waitForIframe();
 })();
