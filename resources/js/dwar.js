@@ -72,6 +72,8 @@
                 if (clickTimeout) return;
 
                 canvas = targetCanvas;
+                canvas.style.touchAction = 'none';
+                canvas.style.cursor = 'pointer';
 
                 function clickLoop() {
                     if (!document.body.contains(canvas)) {
