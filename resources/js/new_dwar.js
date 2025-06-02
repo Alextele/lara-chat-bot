@@ -86,3 +86,5 @@
 
     waitForIframe();
 })();
+
+console.log(this.document.lvl.model.hpCur);
