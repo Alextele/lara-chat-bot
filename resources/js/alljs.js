@@ -277,12 +277,13 @@ async function startPressing(x, y) {
             }
         } else {
             clearTimeout(keypressTimeout);
+            keypressTimeout = null;
             console.log('бой окончен');
             //кушаем и планируем новый цикл
             const top_menu_canvas_rect = document.getElementById('top_mnu').getBoundingClientRect();
             const centerX = top_menu_canvas_rect.left + top_menu_canvas_rect.width / 3.55;
             const centerY = top_menu_canvas_rect.top + top_menu_canvas_rect.height / 2;
-            keypressTimeout = setTimeout(() => eat(centerX, centerY), getRandom(900, 1300));
+            setTimeout(() => eat(centerX, centerY), getRandom(900, 1300));
             return;
         }
 
