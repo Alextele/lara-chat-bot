@@ -88,3 +88,4 @@
 })();
 
 console.log(this.document.lvl.model.hpCur);
+//Вместо проверки cursorStyle === 'pointer' можно использовать метод document.elementFromPoint(x, y), чтобы определить, какой элемент находится под заданными координатами, и проверить, является ли он интерактивным (например, имеет атрибут onclick или CSS cursor: pointer).

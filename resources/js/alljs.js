@@ -111,9 +111,11 @@ async function smoothMoveAndClick(iframe, startX, startY) {
     simulateKeyPress()
     if(document.querySelector('iframe#main').contentDocument.getElementById('fightCanvas')) {
         //тут вся логика боя
+        console.log('я тут бой начался');
         await startPressing(finalX, finalY);
 
     } else {
+        console.log('бой пока не обнаружен');
         //если бой не начался, то переводим курсор на охоту
         const top_menu_canvas_rect = document.getElementById('top_mnu').getBoundingClientRect();
         const centerX = top_menu_canvas_rect.left + top_menu_canvas_rect.width / 3.55;
@@ -249,9 +251,15 @@ async function startPressing(x, y) {
     if (keypressTimeout) return;
     let click_hp_counter = 0;
     let lastPressTimes = [0, 0, 0, 0, 0]; // Массив для хранения времени последнего нажатия для каждого case
+    let first_check = true; // инициализация первого запуска
 
     async function loop() {
-
+        if (first_check) {
+            await sleep(3000);
+            simulateKeyPress();
+            await sleep(2000);
+            first_check = false;
+        }
         if(document.lvl.topWindow[1].obj) {
             const fight_log = document.lvl.topWindow[1].obj.innerText ?? '';
             const regex_fight = /проиграл бой/;
@@ -261,14 +269,20 @@ async function startPressing(x, y) {
                 const centerY = top_menu_canvas_rect.top + top_menu_canvas_rect.height / 2;
                 await move_mouse(x, y, centerX, centerY, document.getElementById('top_mnu'));
                 //клацаем
-                top_click();
+                simulate_click(document.getElementById('top_mnu'), centerX, centerY);
                 await sleep(1000);
                 simulateKeyPress();
                 await loop();
-                return;
+                return true;
             }
         } else {
+            clearTimeout(keypressTimeout);
             console.log('бой окончен');
+            //кушаем и планируем новый цикл
+            const top_menu_canvas_rect = document.getElementById('top_mnu').getBoundingClientRect();
+            const centerX = top_menu_canvas_rect.left + top_menu_canvas_rect.width / 3.55;
+            const centerY = top_menu_canvas_rect.top + top_menu_canvas_rect.height / 2;
+            keypressTimeout = setTimeout(() => eat(centerX, centerY), getRandom(900, 1300));
             return;
         }
 
@@ -281,49 +295,73 @@ async function startPressing(x, y) {
                     simulateKeyPress(51, '3', 'Digit3');
                     lastPressTimes[0] = currentTime; // Обновляем время последнего нажатия
                     click_hp_counter += 1;
+                    clearTimeout(keypressTimeout);
                     keypressTimeout = setTimeout(loop, getRandom(900, 1300));
                     break;
                 case (click_hp_counter < 10 && (currentTime - lastPressTimes[1] >= 22000)):
                     simulateKeyPress(52, '4', 'Digit4');
                     lastPressTimes[1] = currentTime; // Обновляем время последнего нажатия
                     click_hp_counter += 1;
+                    clearTimeout(keypressTimeout);
                     keypressTimeout = setTimeout(loop, getRandom(900, 1300));
                     break;
                 case (click_hp_counter < 15 && (currentTime - lastPressTimes[2] >= 22000)):
                     simulateKeyPress(53, '5', 'Digit5');
                     lastPressTimes[2] = currentTime; // Обновляем время последнего нажатия
                     click_hp_counter += 1;
+                    clearTimeout(keypressTimeout);
                     keypressTimeout = setTimeout(loop, getRandom(900, 1300));
                     break;
                 case (click_hp_counter < 20 && (currentTime - lastPressTimes[3] >= 22000)):
                     simulateKeyPress(54, '6', 'Digit6');
                     lastPressTimes[3] = currentTime; // Обновляем время последнего нажатия
                     click_hp_counter += 1;
+                    clearTimeout(keypressTimeout);
                     keypressTimeout = setTimeout(loop, getRandom(900, 1300));
                     break;
                 case (click_hp_counter < 25 && (currentTime - lastPressTimes[4] >= 22000)):
                     simulateKeyPress(55, '7', 'Digit7');
                     lastPressTimes[4] = currentTime; // Обновляем время последнего нажатия
                     click_hp_counter += 1;
+                    clearTimeout(keypressTimeout);
                     keypressTimeout = setTimeout(loop, getRandom(900, 1300));
                     break;
             }
         }
         if (curr_hp * 1 < 200) {
             const delay = getRandom(900, 1300);
+            clearTimeout(keypressTimeout);
             keypressTimeout = setTimeout(loop, delay);
             return;
         }
         simulateKeyPress();
         const delay = getRandom(900, 1300);
+        clearTimeout(keypressTimeout);
         keypressTimeout = setTimeout(loop, delay);
     }
     await loop();
 }
-
 
 function stopPressing() {
     clearTimeout(keypressTimeout);
     keypressTimeout = null;
 }
 
+async function eat(x,y) {
+    clearTimeout(keypressTimeout);
+    const curr_hp = document.lvl.model.hpCur;
+    if (curr_hp*1 < 500) {
+        const element = document.getElementById('items_right_cont');
+        const rect = element.getBoundingClientRect();
+        const currX = rect.left + rect.width / 4.1;
+        const currY = rect.top + rect.height / 4.4;
+        //перенесем курсор
+        await move_mouse(x, y, currX, currY, element);
+        simulate_click(element.querySelector('canvas'), currX, currY);
+        await sleep(1000);
+        top_click();
+    } else {
+        await sleep(1000);
+        top_click();
+    }
+}
