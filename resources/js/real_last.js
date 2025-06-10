@@ -47,80 +47,64 @@ async function smoothMoveAndClick(iframe, startX, startY) {
         console.error('Canvas не найден внутри iframe');
         return;
     }
-
-    const rect = iframe.getBoundingClientRect();
-
-    // Задаём центральную область - 60% ширины и высоты канваса
-    const areaWidth = rect.width * 0.6;
-    const areaHeight = rect.height * 0.6;
-
-    // Координаты левого верхнего угла центральной области
-    const startAreaX = rect.left + (rect.width - areaWidth) / 2;
-    const startAreaY = rect.top + (rect.height - areaHeight) / 2;
-
-    //переносим курсор
-    await move_mouse(startX, startY, startAreaX, startAreaY, canvas);
-
-    // Теперь переходим к проверке в центральной области
-    const stepsX = 30; // можно увеличить для большей точности
-    const stepsY = 30;
-
-    // Шаги по координатам
-    const deltaX = areaWidth / stepsX;
-    const deltaY = areaHeight / stepsY;
-
-    let finalX = null, finalY = null;
-
-    outerLoop: for (let yStep = 0; yStep <= stepsY; yStep++) {
-        let currentY = startAreaY + yStep * deltaY;
-
-        for (let xStep = 0; xStep <= stepsX; xStep++) {
-            let currentX = startAreaX + xStep * deltaX;
-
-            finalX = currentX; // обновляем при каждой итерации
-            finalY = currentY;
-
-            const options = {
-                bubbles: true,
-                cancelable: true,
-                clientX: currentX,
-                clientY: currentY,
-                pointerType: 'mouse',
-                isPrimary: true,
-            };
-
-            canvas.dispatchEvent(new PointerEvent('pointermove', options));
-            canvas.dispatchEvent(new MouseEvent('mousemove', options));
-
-            let cursorStyle = canvas.style.cursor;
-            console.log(cursorStyle);
-
-            if (cursorStyle === 'pointer') {
-                console.log('Cursor pointer detected at', currentX, currentY);
-                simulateDoubleClick(canvas, currentX, currentY);
-                break outerLoop; // прерываем цикл, координаты уже сохранены
-            }
-            await sleep(10);
-        }
+    async function waitForElement(iframe) {
+        let count_do = 0;
+        let myElem = false;
+        do {
+            await sleep(1000);
+            myElem = markAllInteractiveElements(iframe);
+            count_do++;
+        } while (!myElem && count_do < 5);
+        return myElem; // возвращаем найденный элемент или null/undefined после 5 попыток
     }
+    const myElem = await waitForElement(iframe);
 
-    //тут делаем задержку в пару секунд и далее анализируем начался ли бой (попробуем пару раз нажать)
-    simulateKeyPress()
-    const delay = getRandom(1800, 2200);
-    await sleep(delay);
-    simulateKeyPress()
-    if(document.querySelector('iframe#main').contentDocument.getElementById('fightCanvas')) {
-        //тут вся логика боя
-        console.log('я тут бой начался');
-        await startPressing(finalX, finalY);
+    if (myElem) {
+        const bounds = myElem.getBounds();
+        const centerX = bounds.left + bounds.width/2;
+        const centerY = bounds.top + bounds.height/2;
 
+        //переносим курсор
+        await move_mouse(startX, startY, centerX, centerY, canvas);
+        //делаем задержку
+        const delay = getRandom(700, 1000);
+        await sleep(delay);
+        simulateDoubleClick(canvas, centerX, centerY);
+
+        async function waitForFighting() {
+            let count_do = 0;
+            let myElem = document.querySelector('iframe#main').contentDocument.getElementById('fightCanvas');
+            do {
+                simulateKeyPress();
+                await sleep(1000);
+                myElem = document.querySelector('iframe#main').contentDocument.getElementById('fightCanvas');
+                count_do++;
+            } while (!myElem && count_do < 5);
+            return myElem; // возвращаем найденный элемент или null/undefined после 5 попыток
+        }
+        const fightElem = await waitForFighting();
+        // console.log(fightElem);
+        if(fightElem) {
+            //тут вся логика боя
+            // console.log('я тут бой начался');
+            await startPressing(centerX, centerY);
+        } else {
+            console.log('бой пока не обнаружен');
+            //если бой не начался, то переводим курсор на охоту
+            const top_menu_canvas_rect = document.getElementById('top_mnu').getBoundingClientRect();
+            const newcenterX = top_menu_canvas_rect.left + top_menu_canvas_rect.width / 6;
+            const newcenterY = top_menu_canvas_rect.top + top_menu_canvas_rect.height / 2;
+            await move_mouse(centerX, centerY, newcenterX, newcenterY, document.getElementById('top_mnu'));
+            //клацаем и запускаем новый процесс
+            top_click();
+        }
     } else {
-        console.log('бой пока не обнаружен');
+        // console.error('не найдена жертва');
         //если бой не начался, то переводим курсор на охоту
         const top_menu_canvas_rect = document.getElementById('top_mnu').getBoundingClientRect();
         const centerX = top_menu_canvas_rect.left + top_menu_canvas_rect.width / 6;
         const centerY = top_menu_canvas_rect.top + top_menu_canvas_rect.height / 2;
-        await move_mouse(finalX, finalY, centerX, centerY, document.getElementById('top_mnu'));
+        await move_mouse(startX, startY, centerX, centerY, document.getElementById('top_mnu'));
         //клацаем и запускаем новый процесс
         top_click();
     }
@@ -247,8 +231,9 @@ function simulateKeyPress(keyCode= 69, key= 'у', code = 'KeyE') {
 }
 
 async function startPressing(x, y) {
-
+    // console.log('я тут');
     if (keypressTimeout) return;
+    // console.log(('я прошел дальше'));
     let click_hp_counter = 0;
     let lastPressTimes = [0, 0, 0, 0, 0]; // Массив для хранения времени последнего нажатия для каждого case
     let first_check = true; // инициализация первого запуска
@@ -343,11 +328,6 @@ async function startPressing(x, y) {
     await loop();
 }
 
-function stopPressing() {
-    clearTimeout(keypressTimeout);
-    keypressTimeout = null;
-}
-
 async function eat(x,y) {
     clearTimeout(keypressTimeout);
     const curr_hp = document.lvl.model.hpCur;
@@ -364,5 +344,56 @@ async function eat(x,y) {
     } else {
         await sleep(1000);
         top_click();
+    }
+}
+
+function markAllInteractiveElements(iframe_hunt) {
+    const rect_iframe_hunt = iframe_hunt.getBoundingClientRect();
+    try {
+        const iframeDoc = iframe_hunt.contentWindow.document;
+        const huntCanvas = iframeDoc.getElementById('huntCanvas');
+        if (!huntCanvas) {
+            // console.error('huntCanvas не найден');
+            return false;
+        }
+
+        const huntMap = iframeDoc.hunt_map;
+        if (!huntMap || !huntMap.stage) {
+            // console.error('hunt_map или stage не найдены');
+            return false;
+        }
+
+        // Собираем все интерактивные элементы
+        const interactiveElements = [];
+        function traverse(container) {
+            for (const child of container.children) {
+                if (child.interactive && child._frameEvent === "Hunt.ENTER_FRAME" && child.getBounds().top > rect_iframe_hunt.height*0.1 && child.getBounds().top < rect_iframe_hunt.height*0.8) {
+                    interactiveElements.push(child);
+                }
+                if (child.children) {
+                    traverse(child);
+                }
+            }
+        }
+        traverse(huntMap.stage);
+
+        if (interactiveElements.length === 0) {
+            // console.error('Интерактивные элементы не найдены');
+            return false;
+        }
+
+        // Проверяем, что массив не пустой
+        if (interactiveElements.length > 0) {
+            // Генерируем случайный индекс от 0 до длины массива - 1
+            const randomIndex = Math.floor(Math.random() * interactiveElements.length);
+            return interactiveElements[randomIndex];
+
+        } else {
+            // console.log('Массив интерактивных элементов пуст.');
+            return false
+        }
+    } catch (e) {
+        // console.error('Ошибка:', e);
+        return false;
     }
 }
