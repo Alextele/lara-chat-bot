@@ -105,7 +105,4 @@ async function hunt_click() {
     await smoothMoveAndClick(canvas, startX, startY);
 }
 
-// Запуск
-hunt_click();
-
 
