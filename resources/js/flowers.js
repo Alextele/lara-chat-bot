@@ -4,19 +4,13 @@ function markAllInteractiveElements(iframe_hunt) {
         const iframeDoc = iframe_hunt.contentWindow.document;
         const huntCanvas = iframeDoc.getElementById('huntCanvas');
         if (!huntCanvas) {
-            // console.error('huntCanvas не найден');
-            return false;
+            return [];
         }
-
         const huntMap = iframeDoc.hunt_map;
         if (!huntMap || !huntMap.stage) {
-            // console.error('hunt_map или stage не найдены');
-            return false;
+            return [];
         }
-
-        // Собираем все интерактивные элементы
         let interactiveElements = [];
-
         function traverse(container) {
             for (const child of container.children) {
                 if (child.interactive && child._frameEvent === "Hunt.ENTER_FRAME" && Object.keys(child._trackedPointers).length === 0 && child.getBounds().top > rect_iframe_hunt.height * 0.1 && child.getBounds().top < rect_iframe_hunt.height * 0.8) {
@@ -27,55 +21,38 @@ function markAllInteractiveElements(iframe_hunt) {
                 }
             }
         }
-
         traverse(huntMap.stage);
         return interactiveElements;
     } catch (e) {
-        // console.error('Ошибка:', e);
-        return false;
+        console.log(e);
+        return [];
     }
 }
-
-function find_text(container, arr = []) {
-    for (const child of container.children) {
-        if (child._text === 'закрыть') {
-            arr.push(child);
-        }
-        if (child.children) {
-            find_text(child, arr)
-        }
-    }
-    return arr;
+function getRandom(min, max) {
+    return min + Math.random() * (max - min);
 }
-
-console.log(find_text(document.getElementById('main').contentWindow.document.hunt_map.stage));
-
-console.log(markAllInteractiveElements(document.getElementById('main')));
-console.log(document.getElementById('main').contentWindow.document.hunt_map.stage);
-document.lvl.topWindow.temp_effects;
-
-// Функция draw_dot
-const draw_dot = (x, y, parentDoc) => {
-    const dot = parentDoc.createElement('div');
-    dot.style.position = 'absolute';
-    dot.style.left = `${x - 4}px`;
-    dot.style.top = `${y - 4}px`;
-    dot.style.width = '8px';
-    dot.style.height = '8px';
-    dot.style.backgroundColor = 'red';
-    dot.style.borderRadius = '50%';
-    dot.style.zIndex = '9999';
-    parentDoc.body.appendChild(dot);
-};
-
-let my_elem = find_text(document.getElementById('main').contentWindow.document.hunt_map.stage)[0];
-let bounds = my_elem.getBounds();
-let centerX = bounds.left + bounds.width/2;
-let centerY = bounds.top + bounds.height/2;
-console.log(centerX);
-console.log(centerY);
-draw_dot(centerX, centerY, document.getElementById('main').contentWindow.document);
-
+async function move_mouse (startX, startY, current_totalX, current_totalY, canvas) {
+    const initialSteps = 10;
+    const initialDeltaX = (current_totalX - startX) / initialSteps;
+    const initialDeltaY = (current_totalY - startY) / initialSteps;
+    let currentX = startX;
+    let currentY = startY;
+    for (let i = 0; i <= initialSteps; i++) {
+        const options = {
+            bubbles: true,
+            cancelable: true,
+            clientX: currentX,
+            clientY: currentY,
+            pointerType: 'mouse',
+            isPrimary: true,
+        };
+        canvas.dispatchEvent(new PointerEvent('pointermove', options));
+        canvas.dispatchEvent(new MouseEvent('mousemove', options));
+        currentX += initialDeltaX;
+        currentY += initialDeltaY;
+        await sleep(50);
+    }
+}
 function simulate_click(target, x, y) {
     const options = {
         bubbles: true,
@@ -94,36 +71,6 @@ function simulate_click(target, x, y) {
         clientY: y,
     }));
 }
-simulate_click(document.getElementById('main').contentWindow.document.querySelector('canvas'), centerX, centerY);
-
-
-async function move_mouse (startX, startY, current_totalX, current_totalY, canvas) {
-    const initialSteps = 50;
-    const initialDeltaX = (current_totalX - startX) / initialSteps;
-    const initialDeltaY = (current_totalY - startY) / initialSteps;
-    let currentX = startX;
-    let currentY = startY;
-    for (let i = 0; i <= initialSteps; i++) {
-        const options = {
-            bubbles: true,
-            cancelable: true,
-            clientX: currentX,
-            clientY: currentY,
-            pointerType: 'mouse',
-            isPrimary: true,
-        };
-        canvas.dispatchEvent(new PointerEvent('pointermove', options));
-        canvas.dispatchEvent(new MouseEvent('mousemove', options));
-        currentX += initialDeltaX;
-        currentY += initialDeltaY;
-        await sleep(50); // небольшая задержка для плавности
-    }
-}
-
-function getRandom(min, max) {
-    return min + Math.random() * (max - min);
-}
-
 function simulateDoubleClick(target, x, y) {
     const options = {
         bubbles: true,
@@ -141,13 +88,22 @@ function simulateDoubleClick(target, x, y) {
     target.dispatchEvent(new MouseEvent('click', options));
     target.dispatchEvent(new MouseEvent('dblclick', options));
 }
-
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-
-async function sobiraemCveti(delay_sbor = 20, startX = 750, startY = 200) {
-    //первоначальная проверка на отсутствие занозы
+function find_text(container, arr = []) {
+    for (const child of container.children) {
+        if (child._text === 'закрыть') {
+            arr.push(child);
+        }
+        if (child.children) {
+            find_text(child, arr)
+        }
+    }
+    return arr;
+}
+async function sobiraemCveti(delay_sbor = 21, startX = 750, startY = 200) {
+    await sleep(1000);
     let effects = document.lvl.topWindow.temp_effects;
     if (Object.keys(effects).length !== 0) {
         for (const effect of Object.values(effects)) {
@@ -156,40 +112,33 @@ async function sobiraemCveti(delay_sbor = 20, startX = 750, startY = 200) {
             }
         }
     }
-    //сперва найдем все не занятые цветы
     let real_delay = delay_sbor * 1000;
+    await move_mouse(startX, startY, startX + getRandom(-10, 10), startY + getRandom(-10, 10), document.getElementById('main').contentWindow.document.querySelector('canvas'));
     let elements = markAllInteractiveElements(document.getElementById('main'));
     const delay = getRandom(300, 600);
-    //если не нашли, то клацаем на охоту и хреначим рекурсию
     if (!elements.length) {
-        //сперва переведем курсор
         const canvas_top = document.getElementById('top_mnu');
         const rect = canvas_top.getBoundingClientRect();
         const centerX = rect.left + rect.width / 6;
         const centerY = rect.top + rect.height / 2;
-        await move_mouse(startX, startY, centerX, centerY, canvas_top);
+        // await move_mouse(startX, startY, centerX, centerY, canvas_top);
         simulate_click(canvas_top, centerX, centerY);
         setTimeout(() => sobiraemCveti(delay_sbor, centerX, centerY), delay);
         return;
     }
-    //если элементы есть - берем рандомный
     let myElement = elements[Math.floor(Math.random() * elements.length)];
     let bounds = myElement.getBounds();
     let centerX = bounds.left + bounds.width/2 + getRandom(-20, 20)*bounds.width/100;
     let centerY = bounds.top + bounds.height/2 + getRandom(-20, 20)*bounds.height/100;
-    //смещаем курсор
-    await move_mouse(startX, startY, centerX, centerY, document.getElementById('main').contentWindow.document.querySelector('canvas'));
-    //двойной клик
+    // await move_mouse(startX, startY, centerX, centerY, document.getElementById('main').contentWindow.document.querySelector('canvas'));
     simulateDoubleClick(document.getElementById('main').contentWindow.document.querySelector('canvas'), centerX, centerY);
-    //ждем 20 сек или заданное количество секунд
     await sleep(real_delay);
-    //проверка, что не всплыло окно о неудачной охоте
     let close_elem = find_text(document.getElementById('main').contentWindow.document.hunt_map.stage)[0];
     if (close_elem){
         let bounds_close_elem = close_elem.getBounds();
         centerX = bounds_close_elem.left + bounds_close_elem.width/2 + getRandom(-20, 20)*bounds_close_elem.width/100;
         centerY = bounds_close_elem.top + bounds_close_elem.height/2 + getRandom(-20, 20)*bounds_close_elem.height/100;
-        await move_mouse(startX, startY, centerX, centerY, document.getElementById('main').contentWindow.document.querySelector('canvas'));
+        // await move_mouse(startX, startY, centerX, centerY, document.getElementById('main').contentWindow.document.querySelector('canvas'));
         simulate_click(document.getElementById('main').contentWindow.document.querySelector('canvas'), centerX, centerY);
     }
     setTimeout(() => sobiraemCveti(delay_sbor, centerX, centerY), delay);
