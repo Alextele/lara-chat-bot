@@ -1,299 +1,272 @@
+// ── Constants ──────────────────────────────────────────────────────────────
+const MOVE_STEPS     = 50;
+const MOVE_STEP_MS   = 50;
+const HUNT_WAIT_MS   = 700;
+const FIGHT_WAIT_MS  = 1000;
+const WAIT_ATTEMPTS  = 5;
+const LOOP_MIN_MS    = 900;
+const LOOP_MAX_MS    = 1300;
+const HP_LOW         = 500;
+const HP_CRITICAL    = 200;
+const POTION_CD_MS   = 22000;
+const HUNT_TOP_RATIO = 0.1;
+const HUNT_BOT_RATIO = 0.8;
+const ITEM_X_RATIO   = 4.1;
+const ITEM_Y_RATIO   = 4.4;
+
+const POTION_SLOTS = [
+    { keyCode: 51, key: '3', code: 'Digit3', maxUses: 5  },
+    { keyCode: 52, key: '4', code: 'Digit4', maxUses: 10 },
+    { keyCode: 53, key: '5', code: 'Digit5', maxUses: 15 },
+    { keyCode: 54, key: '6', code: 'Digit6', maxUses: 20 },
+    { keyCode: 55, key: '7', code: 'Digit7', maxUses: 25 },
+];
+
+let keypressTimeout = null;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-async function move_mouse (startX, startY, current_totalX, current_totalY, canvas) {
-    const initialSteps = 50;
-    const initialDeltaX = (current_totalX - startX) / initialSteps;
-    const initialDeltaY = (current_totalY - startY) / initialSteps;
+
+function getRandom(min, max) {
+    return min + Math.random() * (max - min);
+}
+
+function makePointerOptions(x, y) {
+    return { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerType: 'mouse', isPrimary: true };
+}
+
+async function waitForCondition(checkFn, intervalMs, maxAttempts, sideEffect = null) {
+    let attempts = 0;
+    let result = false;
+    do {
+        if (sideEffect) sideEffect();
+        await sleep(intervalMs);
+        result = checkFn();
+        attempts++;
+    } while (!result && attempts < maxAttempts);
+    return result;
+}
+
+function getTopMenuCenter() {
+    const rect = document.getElementById('top_mnu').getBoundingClientRect();
+    return { x: rect.left + rect.width / 6, y: rect.top + rect.height / 2 };
+}
+
+// ── Input simulation ───────────────────────────────────────────────────────
+async function move_mouse(startX, startY, endX, endY, canvas) {
+    const deltaX = (endX - startX) / MOVE_STEPS;
+    const deltaY = (endY - startY) / MOVE_STEPS;
     let currentX = startX;
     let currentY = startY;
-    for (let i = 0; i <= initialSteps; i++) {
-        const options = {
-            bubbles: true,
-            cancelable: true,
-            clientX: currentX,
-            clientY: currentY,
-            pointerType: 'mouse',
-            isPrimary: true,
-        };
-        canvas.dispatchEvent(new PointerEvent('pointermove', options));
-        canvas.dispatchEvent(new MouseEvent('mousemove', options));
-        currentX += initialDeltaX;
-        currentY += initialDeltaY;
-        await sleep(50);
+    for (let i = 0; i <= MOVE_STEPS; i++) {
+        const opts = makePointerOptions(currentX, currentY);
+        canvas.dispatchEvent(new PointerEvent('pointermove', opts));
+        canvas.dispatchEvent(new MouseEvent('mousemove', opts));
+        currentX += deltaX;
+        currentY += deltaY;
+        await sleep(MOVE_STEP_MS);
     }
 }
+
+function simulate_click(target, x, y) {
+    const opts = makePointerOptions(x, y);
+    target.dispatchEvent(new PointerEvent('pointerdown', opts));
+    target.dispatchEvent(new PointerEvent('pointerup', opts));
+    target.dispatchEvent(new MouseEvent('click', opts));
+}
+
+function simulateDoubleClick(target, x, y) {
+    const opts = makePointerOptions(x, y);
+    target.dispatchEvent(new PointerEvent('pointerdown', opts));
+    target.dispatchEvent(new PointerEvent('pointerup', opts));
+    target.dispatchEvent(new MouseEvent('click', opts));
+    target.dispatchEvent(new PointerEvent('pointerdown', opts));
+    target.dispatchEvent(new PointerEvent('pointerup', opts));
+    target.dispatchEvent(new MouseEvent('click', opts));
+    target.dispatchEvent(new MouseEvent('dblclick', opts));
+}
+
+function simulateKeyPress(keyCode = 69, key = 'у', code = 'KeyE') {
+    const opts = { key, code, keyCode, which: keyCode, bubbles: true, cancelable: true };
+    document.dispatchEvent(new KeyboardEvent('keydown', opts));
+    document.dispatchEvent(new KeyboardEvent('keyup', opts));
+}
+
+// ── Top menu ───────────────────────────────────────────────────────────────
+function top_click() {
+    const canvas_top = document.getElementById('top_mnu');
+    if (!canvas_top) return;
+    const { x, y } = getTopMenuCenter();
+    simulate_click(canvas_top, x, y);
+    setTimeout(() => hunt_click(x, y), 300);
+}
+
+// ── Hunt ───────────────────────────────────────────────────────────────────
+function markAllInteractiveElements(iframe_hunt) {
+    const iframeHeight = iframe_hunt.getBoundingClientRect().height;
+    try {
+        const iframeDoc = iframe_hunt.contentWindow.document;
+        if (!iframeDoc.getElementById('huntCanvas')) return false;
+        const huntMap = iframeDoc.hunt_map;
+        if (!huntMap?.stage) return false;
+
+        const interactiveElements = [];
+        function traverse(container) {
+            for (const child of container.children) {
+                const bounds = child.getBounds();
+                if (
+                    child.interactive &&
+                    child._frameEvent === 'Hunt.ENTER_FRAME' &&
+                    bounds.top > iframeHeight * HUNT_TOP_RATIO &&
+                    bounds.top < iframeHeight * HUNT_BOT_RATIO
+                ) {
+                    interactiveElements.push(child);
+                }
+                if (child.children) traverse(child);
+            }
+        }
+        traverse(huntMap.stage);
+
+        if (interactiveElements.length === 0) return false;
+        return interactiveElements[Math.floor(Math.random() * interactiveElements.length)];
+    } catch (e) {
+        return false;
+    }
+}
+
 async function smoothMoveAndClick(iframe, startX, startY) {
     const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-    if (!iframeDoc) {
-        return;
-    }
+    if (!iframeDoc) return;
     const canvas = iframeDoc.querySelector('canvas');
-    if (!canvas) {
-        return;
-    }
-    async function waitForElement(iframe) {
-        let count_do = 0;
-        let myElem = false;
-        do {
-            await sleep(700);
-            myElem = markAllInteractiveElements(iframe);
-            count_do++;
-        } while (!myElem && count_do < 5);
-        return myElem;
-    }
-    const myElem = await waitForElement(iframe);
+    if (!canvas) return;
+
+    const myElem = await waitForCondition(
+        () => markAllInteractiveElements(iframe),
+        HUNT_WAIT_MS,
+        WAIT_ATTEMPTS
+    );
+
     if (myElem) {
         const bounds = myElem.getBounds();
-        const centerX = bounds.left + bounds.width/2 + getRandom(-20, 20)*bounds.width/100;
-        const centerY = bounds.top + bounds.height/2 + getRandom(-20, 20)*bounds.height/100;
+        const centerX = bounds.left + bounds.width / 2 + getRandom(-20, 20) * bounds.width / 100;
+        const centerY = bounds.top + bounds.height / 2 + getRandom(-20, 20) * bounds.height / 100;
         await move_mouse(startX, startY, centerX, centerY, canvas);
         simulateDoubleClick(canvas, centerX, centerY);
-        async function waitForFighting() {
-            let count_do = 0;
-            let myElem = document.querySelector('iframe#main').contentDocument.getElementById('fightCanvas');
-            do {
-                simulateKeyPress();
-                await sleep(1000);
-                myElem = document.querySelector('iframe#main').contentDocument.getElementById('fightCanvas');
-                count_do++;
-            } while (!myElem && count_do < 5);
-            return myElem;
-        }
-        const fightElem = await waitForFighting();
-        if(fightElem) {
+
+        const fightElem = await waitForCondition(
+            () => iframeDoc.getElementById('fightCanvas'),
+            FIGHT_WAIT_MS,
+            WAIT_ATTEMPTS,
+            simulateKeyPress
+        );
+
+        if (fightElem) {
             await startPressing(centerX, centerY);
         } else {
             top_click();
         }
     } else {
-        const top_menu_canvas_rect = document.getElementById('top_mnu').getBoundingClientRect();
-        const centerX = top_menu_canvas_rect.left + top_menu_canvas_rect.width / 6;
-        const centerY = top_menu_canvas_rect.top + top_menu_canvas_rect.height / 2;
-        await move_mouse(startX, startY, centerX, centerY, document.getElementById('top_mnu'));
+        const { x, y } = getTopMenuCenter();
+        await move_mouse(startX, startY, x, y, document.getElementById('top_mnu'));
         top_click();
     }
 }
-function simulateDoubleClick(target, x, y) {
-    const options = {
-        bubbles: true,
-        cancelable: true,
-        clientX: x,
-        clientY: y,
-        pointerType: 'mouse',
-        isPrimary: true,
-    };
-    target.dispatchEvent(new PointerEvent('pointerdown', options));
-    target.dispatchEvent(new PointerEvent('pointerup', options));
-    target.dispatchEvent(new MouseEvent('click', options));
-    target.dispatchEvent(new PointerEvent('pointerdown', options));
-    target.dispatchEvent(new PointerEvent('pointerup', options));
-    target.dispatchEvent(new MouseEvent('click', options));
-    target.dispatchEvent(new MouseEvent('dblclick', options));
-}
+
 async function hunt_click(startX, startY) {
-    await sleep(700);
+    await sleep(HUNT_WAIT_MS);
     const iframe_hunt = document.getElementById('main');
     const delay = getRandom(400, 800);
-    if (iframe_hunt) {
-        if (iframe_hunt.contentDocument.title) {
-            setTimeout(() => smoothMoveAndClick(iframe_hunt, startX, startY), delay);
-        } else {
-            setTimeout(() => startPressing(startX, startY), delay);
-        }
-    } else {
+    if (!iframe_hunt) {
         setTimeout(top_click, delay);
+        return;
+    }
+    const doc = iframe_hunt.contentDocument;
+    if (doc && doc.readyState === 'complete') {
+        setTimeout(() => smoothMoveAndClick(iframe_hunt, startX, startY), delay);
+    } else {
+        setTimeout(() => startPressing(startX, startY), delay);
     }
 }
-function top_click() {
-    const canvas_top = document.getElementById('top_mnu');
-    if (canvas_top) {
-        const rect = canvas_top.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 6;
-        const centerY = rect.top + rect.height / 2;
-        simulate_click(canvas_top, centerX, centerY);
-        setTimeout(() => hunt_click(centerX, centerY), 300);
-    }
-}
-function simulate_click(target, x, y) {
-    const options = {
-        bubbles: true,
-        cancelable: true,
-        clientX: x,
-        clientY: y,
-        pointerType: 'mouse',
-        isPrimary: true,
-    };
-    target.dispatchEvent(new PointerEvent('pointerdown', options));
-    target.dispatchEvent(new PointerEvent('pointerup', options));
-    target.dispatchEvent(new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        clientX: x,
-        clientY: y,
-    }));
-}
-function getRandom(min, max) {
-    return min + Math.random() * (max - min);
-}
-function simulateKeyPress(keyCode= 69, key= 'у', code = 'KeyE') {
-    const eventOptions = {
-        key: key,
-        code: code,
-        keyCode: keyCode,
-        which: keyCode,
-        bubbles: true,
-        cancelable: true
-    };
-    const keydown = new KeyboardEvent('keydown', eventOptions);
-    const keyup = new KeyboardEvent('keyup', eventOptions);
-    document.dispatchEvent(keydown);
-    document.dispatchEvent(keyup);
-}
+
+// ── Combat ─────────────────────────────────────────────────────────────────
 async function startPressing(x, y) {
     if (keypressTimeout) return;
     let click_hp_counter = 0;
-    let lastPressTimes = [0, 0, 0, 0, 0];
-    async function waitForElement() {
-        let count_do = 0;
-        let myElem = document.lvl.topWindow[1].obj ?? false;
-        do {
-            simulateKeyPress();
-            await sleep(1000);
-            myElem = document.lvl.topWindow[1].obj ?? false;
-            count_do++;
-        } while (!myElem && count_do < 5);
-        return myElem;
-    }
+    const lastPressTimes = new Array(POTION_SLOTS.length).fill(0);
+
     async function loop() {
-        const topWindowElement = await waitForElement();
-        if(topWindowElement) {
-            const fight_log = topWindowElement.innerText ?? '';
-            const regex_fight = /проиграл бой/;
-            if (regex_fight.test(fight_log)) {
-                const top_menu_canvas_rect = document.getElementById('top_mnu').getBoundingClientRect();
-                const centerX = top_menu_canvas_rect.left + top_menu_canvas_rect.width / 6;
-                const centerY = top_menu_canvas_rect.top + top_menu_canvas_rect.height / 2;
-                await move_mouse(x, y, centerX, centerY, document.getElementById('top_mnu'));
-                simulate_click(document.getElementById('top_mnu'), centerX, centerY);
-                setTimeout(() => loop(), getRandom(600, 1000));
-                return;
-            }
-        } else {
+        const topWindowElement = await waitForCondition(
+            () => document.lvl.topWindow[1].obj ?? false,
+            FIGHT_WAIT_MS,
+            WAIT_ATTEMPTS,
+            simulateKeyPress
+        );
+
+        if (!topWindowElement) {
             clearTimeout(keypressTimeout);
             keypressTimeout = null;
-            const top_menu_canvas_rect = document.getElementById('top_mnu').getBoundingClientRect();
-            const centerX = top_menu_canvas_rect.left + top_menu_canvas_rect.width / 6;
-            const centerY = top_menu_canvas_rect.top + top_menu_canvas_rect.height / 2;
-            setTimeout(() => eat(centerX, centerY), getRandom(900, 1300));
+            const { x: cx, y: cy } = getTopMenuCenter();
+            setTimeout(() => eat(cx, cy), getRandom(LOOP_MIN_MS, LOOP_MAX_MS));
             return;
         }
-        let curr_hp = document.lvl.model.hpCur;
-        const currentTime = Date.now();
-        if (curr_hp * 1 < 500) {
-            switch (true) {
-                case (click_hp_counter < 5 && (currentTime - lastPressTimes[0] >= 22000)):
-                    simulateKeyPress(51, '3', 'Digit3');
-                    lastPressTimes[0] = currentTime;
-                    click_hp_counter += 1;
-                    clearTimeout(keypressTimeout);
-                    keypressTimeout = setTimeout(loop, getRandom(900, 1300));
+
+        if (/проиграл бой/.test(topWindowElement.innerText ?? '')) {
+            const top_mnu = document.getElementById('top_mnu');
+            const { x: cx, y: cy } = getTopMenuCenter();
+            await move_mouse(x, y, cx, cy, top_mnu);
+            simulate_click(top_mnu, cx, cy);
+            keypressTimeout = setTimeout(loop, getRandom(600, 1000));
+            return;
+        }
+
+        const curr_hp = document.lvl.model.hpCur * 1;
+        const now = Date.now();
+
+        if (curr_hp < HP_LOW) {
+            for (let i = 0; i < POTION_SLOTS.length; i++) {
+                const slot = POTION_SLOTS[i];
+                if (click_hp_counter < slot.maxUses && now - lastPressTimes[i] >= POTION_CD_MS) {
+                    simulateKeyPress(slot.keyCode, slot.key, slot.code);
+                    lastPressTimes[i] = now;
+                    click_hp_counter++;
                     break;
-                case (click_hp_counter < 10 && (currentTime - lastPressTimes[1] >= 22000)):
-                    simulateKeyPress(52, '4', 'Digit4');
-                    lastPressTimes[1] = currentTime;
-                    click_hp_counter += 1;
-                    clearTimeout(keypressTimeout);
-                    keypressTimeout = setTimeout(loop, getRandom(900, 1300));
-                    break;
-                case (click_hp_counter < 15 && (currentTime - lastPressTimes[2] >= 22000)):
-                    simulateKeyPress(53, '5', 'Digit5');
-                    lastPressTimes[2] = currentTime;
-                    click_hp_counter += 1;
-                    clearTimeout(keypressTimeout);
-                    keypressTimeout = setTimeout(loop, getRandom(900, 1300));
-                    break;
-                case (click_hp_counter < 20 && (currentTime - lastPressTimes[3] >= 22000)):
-                    simulateKeyPress(54, '6', 'Digit6');
-                    lastPressTimes[3] = currentTime;
-                    click_hp_counter += 1;
-                    clearTimeout(keypressTimeout);
-                    keypressTimeout = setTimeout(loop, getRandom(900, 1300));
-                    break;
-                case (click_hp_counter < 25 && (currentTime - lastPressTimes[4] >= 22000)):
-                    simulateKeyPress(55, '7', 'Digit7');
-                    lastPressTimes[4] = currentTime;
-                    click_hp_counter += 1;
-                    clearTimeout(keypressTimeout);
-                    keypressTimeout = setTimeout(loop, getRandom(900, 1300));
-                    break;
+                }
             }
         }
-        if (curr_hp * 1 < 200) {
-            const delay = getRandom(900, 1300);
+
+        if (curr_hp < HP_CRITICAL) {
             clearTimeout(keypressTimeout);
-            keypressTimeout = setTimeout(loop, delay);
+            keypressTimeout = setTimeout(loop, getRandom(LOOP_MIN_MS, LOOP_MAX_MS));
             return;
         }
+
         simulateKeyPress();
-        const delay = getRandom(900, 1300);
         clearTimeout(keypressTimeout);
-        keypressTimeout = setTimeout(loop, delay);
+        keypressTimeout = setTimeout(loop, getRandom(LOOP_MIN_MS, LOOP_MAX_MS));
     }
+
     await loop();
 }
-async function eat(x,y) {
+
+// ── Eat ────────────────────────────────────────────────────────────────────
+async function eat(x, y) {
     clearTimeout(keypressTimeout);
-    const curr_hp = document.lvl.model.hpCur;
-    if (curr_hp*1 < 500) {
+    const curr_hp = document.lvl.model.hpCur * 1;
+    if (curr_hp < HP_LOW) {
         const element = document.getElementById('items_right_cont');
         const rect = element.getBoundingClientRect();
-        const currX = rect.left + rect.width / 4.1;
-        const currY = rect.top + rect.height / 4.4;
+        const currX = rect.left + rect.width / ITEM_X_RATIO;
+        const currY = rect.top + rect.height / ITEM_Y_RATIO;
         await move_mouse(x, y, currX, currY, element);
         simulate_click(element.querySelector('canvas'), currX, currY);
         await sleep(500);
         top_click();
     } else {
-        setTimeout(() => hunt_click(x,y), getRandom(900, 1300));
+        setTimeout(() => hunt_click(x, y), getRandom(LOOP_MIN_MS, LOOP_MAX_MS));
     }
 }
-function markAllInteractiveElements(iframe_hunt) {
-    const rect_iframe_hunt = iframe_hunt.getBoundingClientRect();
-    try {
-        const iframeDoc = iframe_hunt.contentWindow.document;
-        const huntCanvas = iframeDoc.getElementById('huntCanvas');
-        if (!huntCanvas) {
-            return false;
-        }
-        const huntMap = iframeDoc.hunt_map;
-        if (!huntMap || !huntMap.stage) {
-            return false;
-        }
-        const interactiveElements = [];
-        function traverse(container) {
-            for (const child of container.children) {
-                if (child.interactive && child._frameEvent === "Hunt.ENTER_FRAME" && child.getBounds().top > rect_iframe_hunt.height*0.1 && child.getBounds().top < rect_iframe_hunt.height*0.8) {
-                    interactiveElements.push(child);
-                }
-                if (child.children) {
-                    traverse(child);
-                }
-            }
-        }
-        traverse(huntMap.stage);
-        if (interactiveElements.length === 0) {
-            return false;
-        }
-        if (interactiveElements.length > 0) {
-            const randomIndex = Math.floor(Math.random() * interactiveElements.length);
-            return interactiveElements[randomIndex];
-        } else {
-            return false
-        }
-    } catch (e) {
-        return false;
-    }
-}
-let keypressTimeout = null;
+
+// ── Entry point ────────────────────────────────────────────────────────────
 top_click();
